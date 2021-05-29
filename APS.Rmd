@@ -1,0 +1,256 @@
+---
+title: "Evolução da bola de três pontos na NBA"
+author: "Eli Jose, Gabriel Monteiro, Pedro Azambuja"
+output: html_document
+---
+R para Ciência dos Dados
+```{r setup, include=FALSE}
+library(tidyverse)
+library(reshape2)
+library(ggplot2)
+library(hrbrthemes)
+library(viridis)
+library(dbplyr)
+library(factoextra)
+library(NbClust)
+library("gridExtra")
+```
+
+<div style="text-align:center"><img src="./curry.jpg" alt="drawing" width=100% /></div><div style="text-align:center" >Stephen Curry | New York Times</div><b/><br/>
+
+# Sobre o trabalho
+
+A linha de três pontos no basquete surgiu em 1933 como uma alternativa para que jogadores com estaturas menores pudessem competir com jogadores mais altos. O primeiro teste oficial aconteceu na liga universitária americana(NCAA) e só acabou sendo introduzida na NBA na temporada 1979-1980. A sua utilização só se tornou relevante no final dos anos 80 e se consolidou como uma estratégia relevante no jogo nos anos 90, com a ascensão de bons arremessadores como Steve Kerr, Reggie Miller, Mark Price, Dell Curry entre muitos outros. A partir da popularização, o estilo de jogo dos times foi sofrendo mudanças e assim começaram a se formar equipes que focavam suas estratégias ofensivas na bola de 3 pontos, como o Phoenix Suns de Steve Nash e Mike D'Antoni e mais recentemente a dominante equipe do Golden State Warriors com Stephen Curry, Klay Thompson e Kevin Durant.
+
+O objetivo deste projeto é analisar a mudanças de comportamento das equipes da temporada 2003 até 2019 a fim de notar uma participação maior da bola de três pontos no basquete da NBA. O dataset usado é público e pode ser encontrado neste link do [Kaggle](https://www.kaggle.com/nathanlauga/nba-games).
+
+
+
+# Dados Utilizados
+
+Os datasets utilizados foram dos arquivos games.csv e games_details.csv. O primeiro possui informações gerais sobre todos jogos ocorridos entre 2003 e 2020, como informações de placares, pontuação do time da casa e visitante assim como a temporada em que o jogo foi realizado. O segundo possui o box score de cada jogo, assim cada linha traz informações relacionadas a estatísticas de quadra de um jogador junto com qual time este joga e em qual jogo aquelas estatísticas são referentes. 
+
+No primeiro momento, foi feito um pré processamento dos dados com a intenção de:
+
+- Adicionar a coluna SEASON(referente a temporada em que o jogo foi realizado) a tabela com os detalhes dos jogos.
+- Retirar linhas irrelevantes para análises que continham jogadores que não haviam entrado em quadra, logo suas estatísticas eram nulas.
+- Criar as colunas de arremessos de dois pontos convertidos, arremessos de dois pontos realizados e porcentagem de acerto de arremessos de dois pontos. Atualmente só existe a coluna de arremessos totais convertidos e tentados assim como de arremessos de três pontos.
+- Retirar a temporada 2020 da análise pois devido a pandemia do Covid-19 esta temporada teve menos jogos.
+
+
+```{r}
+# Import dataset de jogos
+games = tibble(read.csv('games.csv'))
+head(games)
+
+# Import dataset com detalhes dos jogos
+games_details = tibble(read.csv('games_details.csv'))
+head(games_details)
+
+# Removendo NaNs, adicionando coluna das temporadas e criando 
+# colunas para estatísticas de arremessos de 2 pontos
+df <- games_details %>%
+  na.omit() %>%
+  inner_join(games%>% dplyr::select(GAME_ID, SEASON),
+             by="GAME_ID") %>%
+  mutate(FG2M = FGM - FG3M,
+         FG2A = FGA - FG3A,
+         FG2_PCT = FG2M/FG2A) %>%
+  filter(SEASON != c('2020'))
+
+head(df)
+
+```
+
+# Arresso de três pontos ao longo dos anos
+
+A primeira análise buscou entender se da temporada 2003 até 2019 houve ou não uma mudança de comportamento na estratégia dos times referente a utilização de arremessos de três pontos. Para isso, será utilizado dois gráficos:
+
+1. Arremessos de dois pontos convertidos e realizados
+2. Arremessos de três pontos convertidos e realizados
+
+```{r, fig.height=9, fig.width=8}
+df_1 <- df %>%
+  group_by(SEASON) %>%
+  summarise(TOTAL_FGM = sum(FGM), TOTAL_FGA = sum(FGA),
+            TOTAL_2PTM = sum(FG2M), TOTAL_2PTA = sum(FG2A),
+            TOTAL_3PTM = sum(FG3M), TOTAL_3PTA = sum(FG3A)) %>%
+  pivot_longer(!SEASON, 
+               names_to = "FG_TYPE", 
+               values_to = "count")
+
+two_plot <- ggplot(df_1 %>% filter(FG_TYPE %in% c('TOTAL_2PTM','TOTAL_2PTA')),aes(x = SEASON,y = count)) + 
+  geom_bar(aes(fill = FG_TYPE),stat = "identity",position = position_dodge()) +
+  ggtitle("Arremessos de dois pontos ao longo dos anos") + 
+  labs(y="Quantidade", x="Temporada") +
+  scale_fill_discrete(name = "Arremessos de dois pontos", labels = c("Realizados", "Convertidos"))
+
+three_plot <- ggplot(df_1 %>% filter(FG_TYPE %in% c('TOTAL_3PTM','TOTAL_3PTA')),aes(x = SEASON,y = count)) + 
+  geom_bar(aes(fill = FG_TYPE),stat = "identity",position = position_dodge()) +
+  ggtitle("Arremessos de três pontos ao longo dos anos") + 
+  labs(y="Quantidade", x="Temporada") + 
+  scale_fill_discrete(name = "Arremessos de três pontos", labels = c("Realizados", "Convertidos"))
+
+grid.arrange(two_plot, three_plot, ncol = 1) 
+```
+
+Nos arremessos de dois pontos, tanto convertidos quanto realizados, não se observa uma variação relevante até 2014, depois desse período é possível observar uma queda nos arremessos realizados. Já nos arremessos de três pontos, a partir de 2012 existe uma alta expressiva na tentativa de arremessos acompanhada com uma alta também em arremessos convertidos. Desta forma, é possível inferir que os times vem cada vez mais utilizando o arremesso de três pontos como arma ofensiva, e não somente realizando mais arremessos no geral, como poderia ser o caso se os arremessos de dois pontos também estivessem em crescimento.
+
+# Distribuição de pontos por tipo de arremesso ao longo dos anos
+
+Após notar uma leve queda nas tentativas de arremessos de 2 pontos e uma forte alta na tentativa de arremessos de três pontos, vamos observar a distribuição dos pontos marcados em cada temporada pelo tipo de arremesso convertido. Para isso, somamos os pontos feitos em cada temporada e calculamos a proporção de cada tipo de arremesso desses pontos. Lembrando que no basquete da NBA existem três tipos de arremessos:
+
+1. Lance livre: vale um ponto
+2. Arremesso dentro da linha de três pontos: vale dois pontos
+3. Arremesso atrás da linha de três pontos: vale três pontos
+
+```{r}
+df_2 <- df %>%
+  group_by(SEASON) %>% 
+  summarise(FTs = sum(FTM),PT2s = sum(FG2M*2), PT3s = sum(FG3M*3),TOTAL_PTS = sum(PTS)) %>%
+  pivot_longer(!c(SEASON,TOTAL_PTS), names_to = "SHOT_TYPE", values_to = "count") %>% 
+  mutate(pct = (count/TOTAL_PTS*100))
+
+ggplot(df_2, aes(x="", y=count, fill=SHOT_TYPE)) +
+  geom_col(position = "fill")  +
+  coord_polar(theta="y") +
+  facet_wrap(~ SEASON) +
+  theme_void() +
+  ggtitle("Distribuição de pontos por tipo de arremesso") + 
+  scale_fill_discrete(name = "Tipo do arremesso", labels = c("Lance Livre", "Arremesso de dois pontos","Arremesso de três pontos"))
+```
+
+Observando os anos de 2003 até 2012, é possível notar que os pontos originados de lances livres e arremessos de três pontos possuem proporções parecidas, enquanto os originados de dois pontos são dominantes. A partir de 2013 é visualmente notável que os pontos originados de arremessos de três pontos começam a tomar uma proporção maior, enquanto os pontos de lances livres acabam se mantendo. Os pontos de arremessos dois pontos mesmo dominantes, cedem espaços para os pontos originados dos arremessos de três pontos.
+
+
+# Distruibuição dos arremessos de dois e três pontos por posição
+
+Com as duas análises anteriores, está claro que os arremessos de três pontos não só são cada vez mais frequentes como possuem uma participação maior nos pontos anotados pelas equipes. Dessa forma, a próxima análise busca observar essas mudanças no comportamento dos jogadores, focando nas posições deles em quadra. Assim, foram montados dois gráficos que mostram a participação de cada posição nos arremessos de dois e três pontos feitos durante os anos.
+
+```{r, fig.width=20, fig.height=10}
+df_3 <- df %>%
+  group_by(SEASON, START_POSITION) %>%
+  filter(!START_POSITION == "") %>%
+  summarise(TOTAL_2PTM = sum(FG2M), TOTAL_2PTA = sum(FG2A),
+            TOTAL_3PTM = sum(FG3M), TOTAL_3PTA = sum(FG3A)) %>%
+  mutate(pct_2PTM = TOTAL_2PTM/sum(TOTAL_2PTM),pct_2PTA = TOTAL_2PTA/sum(TOTAL_2PTA),
+         pct_3PTM = TOTAL_3PTM/sum(TOTAL_3PTM),pct_3PTA = TOTAL_3PTA/sum(TOTAL_3PTA)) 
+
+two_pos_plot <- ggplot(df_3,aes(x = SEASON,y = pct_2PTA)) + 
+  geom_area(aes(fill = START_POSITION),stat = "identity",position = position_fill(reverse = TRUE)) +
+  scale_y_continuous(labels = scales::percent) +
+  ggtitle("Distribuição de arremessos de dois pontos realizados por posição") + 
+  labs(y="Distribuição dos arremessos", x="Temporada") + 
+  scale_fill_discrete(name = "Posição", labels = c("Pivô", "Ala", "Armador"))
+
+three_pos_plot <- ggplot(df_3,aes(x = SEASON,y = pct_3PTA)) + 
+  geom_area(aes(fill = START_POSITION),stat = "identity",position = position_fill(reverse = TRUE)) +
+  scale_y_continuous(labels = scales::percent) +
+  ggtitle("Distribuição de arremessos de três pontos realizados por posição") + 
+  labs(y="Distribuição dos arremessos", x="Temporada") + 
+  scale_fill_discrete(name = "Posição", labels = c("Pivô", "Ala", "Armador"))
+
+grid.arrange(two_pos_plot, three_pos_plot, ncol = 2) 
+```
+
+A porcentagem de arremessos de dois pontos por posição não variou de forma significativa, enquanto os arremessos de três pontos tiveram uma participação maior dos pivôs e dos alas a partir de 2015. Agora vamos observar a efetividade do arremesso de três pontos por posição ao longo dos anos e ver se além de arremessar mais, os alas e os pivôs também aperfeiçoaram o arremesso.
+
+# Aproveitamento do arremesso de três pontos por posição
+
+
+```{r, fig.width=10}
+df_4 <- df %>%
+  group_by(SEASON, START_POSITION) %>%
+  filter(!START_POSITION == "") %>%
+  summarise(PT3_RATE = mean(FG3_PCT))
+
+ggplot(df_4,aes(x = SEASON,y = PT3_RATE, group=START_POSITION, color=START_POSITION)) + 
+  geom_line() + 
+  ggtitle("Aproveitamento de três pontos por posição") +
+  labs(y="Aproveitamento", x="Temporada", color="Posição") + 
+  scale_color_discrete(labels = c("Pivô", "Ala", "Armador")) +
+  scale_y_continuous(labels = scales::percent)
+```
+
+
+Esse gráfico confirma que todas as posições buscaram aperfeiçoar o arremesso de três pontos. Os armadores que já tinham uma média próxima de 30% dos arremessos de três conseguiram evoluir esse número, mas o mais relevante foi observado nos alas que pularam de uma porcentagem de menos de 20% para mais de 30% e os pivôs que tinham um aproveitamento de menos de 5% para mais de 15%.
+
+
+# Clusterização
+
+Como os gráficos acima corroboram com a hipótese de que o jogo de basquete na NBA está cada vez mais focado na utilização do arremesso de três pontos como estratégia ofensiva, será realizada uma clusterização dos jogadores  para observar se existem variações nos grupos formados entre diferentes temporadas. A estratégia adotada foi o [K-means](https://scikit-learn.org/stable/modules/clustering.html#k-means). Para definir o número ideal de clusters foi utilizado o método do cotovelo que para diversos valores de k clusters, soma as distâncias quadradas entre os pontos de dados e os centroides. O valor de k que representar o "cotovelo" do gráfico pode indicar o número ideal de clusters. Este [artigo](https://medium.com/pizzadedados/kmeans-e-metodo-do-cotovelo-94ded9fdf3a9) explica de forma mais detalhada a parte matemática deste método.
+
+Para fazer isso, foram escolhidas as temporadas de 2003 e 2019 para efeito de comparação. Além disso, foi calculado as médias de diversas estatísticas de cada jogadores como features para a clusterização e também foram selecionados apenas os cem jogadores com maiores médias de pontos da temporada afim de facilitar a análise e observar jogadores que mais impactam no jogo.
+
+
+```{r}
+df_cluster <- df %>%
+  filter(!START_POSITION == "") %>%
+  group_by(SEASON,PLAYER_NAME) %>%
+  separate(MIN, c("MINUTES", "SECONDS"), convert=TRUE, sep = ":") %>%
+  na.omit() %>%
+  summarise(AVG_MIN = mean(MINUTES),
+            AVG_AST= mean(AST),
+            AVG_PTS= mean(PTS),
+            AVG_REB= mean(REB),
+            AVG_STL= mean(STL),
+            AVG_BLK= mean(BLK),
+            AVG_TO= mean(TO),
+            AVG_FTA= mean(FTA),
+            AVG_2PTA= mean(FG2A),
+            AVG_3PTA= mean(FG3A),
+            AVG_FT_PCT= mean(FT_PCT),
+            AVG_2PT_PCT= mean(FG2_PCT),
+            AVG_3PT_PCT= mean(FG3_PCT)
+            )
+head(df_cluster)
+```
+
+```{r, fig.height = 10, fig.width=8}
+stats <- df_cluster %>%
+  filter(AVG_MIN>18,SEASON == 2004) %>%
+  column_to_rownames('PLAYER_NAME') %>%
+  select(AVG_AST,AVG_PTS,AVG_REB,AVG_STL,AVG_BLK,AVG_TO,
+         AVG_FTA,AVG_2PTA,AVG_3PTA,AVG_FT_PCT,AVG_2PT_PCT,AVG_3PT_PCT) %>%
+  arrange(desc(AVG_PTS)) %>%
+  head(100) %>%
+  scale()
+
+
+elbow<-fviz_nbclust(stats, kmeans, method = "wss")
+
+
+df_kmeans <- kmeans(stats,4)
+cluster<-fviz_cluster(df_kmeans, stats)
+grid.arrange(elbow, cluster, ncol = 1) 
+```
+
+No ano de 2003 é possível observar estrelas como LeBron James, Kobe Bryant, Allen Iverson e Dwyane Wade no cluster 2. Outras estrelas são observados no cluster 3, como Shaquille O'Neal, Kevin Garnett, Yao Ming e Chris Webber. Os outros dois grupos possuem bons jogadores mas com características mais de coadjuvantes. Comparando as estrelas dos grupos 2 e 3, existem uma clara distinção por posição sendo o grupo 2 formado majoritariamente por armadores e alas, enquanto o grupo 3 formado majoritariamente por pivôs. Os pivôs como Garnett, que foi o MVP desta temporada e Duncan que foi o MVP anterior, tinham médias de pontos altas(24.2 e 22.3 respectivamente) e média de arremessos de três pontos por jogo menor que um.
+
+
+<div style="text-align:center"><img src="./garnett_duncan.jpg" alt="drawing" width=50% /></div><div style="text-align:center" >Tim Duncan e Kevin Garnett | por Brian Babineau/NBAE via Getty Images</div><b/><br/>
+
+
+
+```{r, fig.height = 10, fig.width=8}
+stats <- df_cluster %>%
+  filter(AVG_MIN>18,SEASON == 2019) %>%
+  column_to_rownames('PLAYER_NAME') %>%
+  select(AVG_AST,AVG_PTS,AVG_REB,AVG_STL,AVG_BLK,AVG_TO,
+         AVG_FTA,AVG_2PTA,AVG_3PTA,AVG_FT_PCT,AVG_2PT_PCT,AVG_3PT_PCT) %>%
+  arrange(desc(AVG_PTS)) %>%
+  head(100) %>%
+  scale()
+
+
+elbow<-fviz_nbclust(stats, kmeans, method = "wss")
+
+
+df_kmeans <- kmeans(stats,4)
+cluster<-fviz_cluster(df_kmeans, stats)
+grid.arrange(elbow, cluster, ncol = 1) 
+```
+
+Agora observando os grupos formados em 2019, continua havendo dois grupos formados por estrelas e dois grupos formados por coadjuvantes, no entanto existem algumas diferenças. No grupo 2 que era formado por armadores e alas existem agora pivôs como Anthony Davis e Joel Embiid que são pivôs com características modernas, possuindo a bola de três como uma de suas armas ofensivas onde arremessam respectivamente 3.5 e 3.4 bolas de três pontos por jogo em média. O grupo 3 ainda é formado majoritariamente por pivôs, mas estes que não possuem uma média de arremessos de bolas de três pontos quanto os mencionado anteriormente, como por exemplo Andre Drummond e Bam Adebayo(respectivamente 1.8 e 0.2 arremessos de três por jogo).
+
+<div style="text-align:center"><img src="./embiid_davis.jpg" alt="drawing" width=50% /></div><div style="text-align:center" >Anthony Davis e Joel Embiid | por Jonathan Daniel/Getty Images</div><b/><br/>
