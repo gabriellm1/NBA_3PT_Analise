@@ -5,5 +5,5 @@ Este trabalho propõe a análise da utilização do arremesso de três pontos na
 
 Todas análises foram feitas utilizando a linguagem R.
 
-[Dataset utilizado](https://www.kaggle.com/nathanlauga/nba-games)
-[Página do trabalho]()
+- [Dataset utilizado](https://www.kaggle.com/nathanlauga/nba-games)
+- [Página do trabalho](https://gabriellm1.github.io/NBA_3PT_Analise/APS.html)
